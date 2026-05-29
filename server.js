@@ -1,12 +1,11 @@
 const express = require("express");
-const { createCanvas } = require("canvas");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 2026-06-01 00:00:00 中国时间 UTC+8
 // 等于 2026-05-31 16:00:00 UTC
-const DEFAULT_DEADLINE_TIMESTAMP = Date.UTC(2026, 4, 31, 16, 0, 0);
+const DEADLINE_TIMESTAMP = Date.UTC(2026, 4, 31, 16, 0, 0);
 
 function pad(num) {
   return String(num).padStart(2, "0");
@@ -14,99 +13,137 @@ function pad(num) {
 
 function getTimeLeft() {
   const now = Date.now();
-  const diff = Math.max(0, DEFAULT_DEADLINE_TIMESTAMP - now);
+  const diff = Math.max(0, DEADLINE_TIMESTAMP - now);
 
   const totalSeconds = Math.floor(diff / 1000);
 
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
   return {
-    days,
-    hours,
-    minutes,
-    seconds,
+    days: Math.floor(totalSeconds / 86400),
+    hours: Math.floor((totalSeconds % 86400) / 3600),
+    minutes: Math.floor((totalSeconds % 3600) / 60),
+    seconds: totalSeconds % 60,
     isEnded: diff <= 0
   };
 }
 
-function drawCountdown({ days, hours, minutes, seconds, isEnded }) {
-  const width = 600;
-  const height = 150;
-
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext("2d");
-
-  // 背景色
-  ctx.fillStyle = "#2C1C17";
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#ffffff";
+function createCountdownSvg({ days, hours, minutes, seconds, isEnded }) {
+  const bgColor = "#2C1C17";
+  const textColor = "#FFFFFF";
 
   if (isEnded) {
-    ctx.textBaseline = "middle";
-    ctx.font = "bold 34px Arial";
-    ctx.fillText("OFFER ENDED", width / 2, height / 2);
-    return canvas.toBuffer("image/png");
+    return `
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150" viewBox="0 0 600 150">
+  <rect width="600" height="150" fill="${bgColor}"/>
+  <text x="300" y="78" text-anchor="middle"
+        font-family="Georgia, Times New Roman, serif"
+        font-size="42"
+        fill="${textColor}"
+        letter-spacing="3">
+    OFFER ENDED
+  </text>
+</svg>`;
   }
 
-  const values = [
-    { label: "DAYS", value: days },
-    { label: "HOURS", value: hours },
-    { label: "MINUTES", value: minutes },
-    { label: "SECONDS", value: pad(seconds) }
-  ];
+  return `
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150" viewBox="0 0 600 150">
+  <rect width="600" height="150" fill="${bgColor}"/>
 
-  const centers = [100, 235, 370, 505];
+  <text x="100" y="75" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="58"
+        fill="${textColor}">
+    ${days}
+  </text>
 
-  const numberY = 72;
-  const labelY = 118;
+  <text x="235" y="75" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="58"
+        fill="${textColor}">
+    ${hours}
+  </text>
 
-  // 数字
-  ctx.font = "64px Arial";
-  values.forEach((item, index) => {
-    ctx.fillText(String(item.value), centers[index], numberY);
-  });
+  <text x="370" y="75" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="58"
+        fill="${textColor}">
+    ${minutes}
+  </text>
 
-  // 冒号
-  ctx.font = "56px Arial";
-  ctx.fillText(":", 168, numberY - 2);
-  ctx.fillText(":", 303, numberY - 2);
-  ctx.fillText(":", 438, numberY - 2);
+  <text x="505" y="75" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="58"
+        fill="${textColor}">
+    ${pad(seconds)}
+  </text>
 
-  // 标签
-  ctx.font = "22px Arial";
-  values.forEach((item, index) => {
-    ctx.fillText(item.label, centers[index], labelY);
-  });
+  <text x="168" y="70" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="54"
+        fill="${textColor}">
+    :
+  </text>
 
-  return canvas.toBuffer("image/png");
+  <text x="303" y="70" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="54"
+        fill="${textColor}">
+    :
+  </text>
+
+  <text x="438" y="70" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="54"
+        fill="${textColor}">
+    :
+  </text>
+
+  <text x="100" y="115" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="21"
+        fill="${textColor}">
+    DAYS
+  </text>
+
+  <text x="235" y="115" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="21"
+        fill="${textColor}">
+    HOURS
+  </text>
+
+  <text x="370" y="115" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="21"
+        fill="${textColor}">
+    MINUTES
+  </text>
+
+  <text x="505" y="115" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="21"
+        fill="${textColor}">
+    SECONDS
+  </text>
+</svg>`;
 }
 
 app.get("/", (req, res) => {
-  res.send("Countdown service is running. Open /countdown.png");
+  res.send("Countdown service is running. Open /countdown.svg");
 });
 
 app.get("/debug", (req, res) => {
   res.json({
     serverNow: new Date().toISOString(),
-    deadlineUTC: new Date(DEFAULT_DEADLINE_TIMESTAMP).toISOString(),
+    deadlineUTC: new Date(DEADLINE_TIMESTAMP).toISOString(),
     deadlineChinaTime: "2026-06-01 00:00:00 UTC+8",
     timeLeft: getTimeLeft()
   });
 });
 
-app.get("/countdown.png", (req, res) => {
-  const timeLeft = getTimeLeft();
-  const image = drawCountdown(timeLeft);
+app.get("/countdown.svg", (req, res) => {
+  const svg = createCountdownSvg(getTimeLeft());
 
-  res.setHeader("Content-Type", "image/png");
+  res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
   res.setHeader(
     "Cache-Control",
     "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
@@ -114,7 +151,7 @@ app.get("/countdown.png", (req, res) => {
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
 
-  res.send(image);
+  res.send(svg);
 });
 
 app.listen(PORT, () => {
