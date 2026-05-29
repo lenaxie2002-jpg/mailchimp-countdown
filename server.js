@@ -5,9 +5,10 @@ const GIFEncoder = require("gifencoder");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 2026-06-01 00:00:00 中国时间 UTC+8
-// 等于 2026-05-31 16:00:00 UTC
-const DEADLINE_TIMESTAMP = Date.UTC(2026, 4, 31, 16, 0, 0);
+// 2026-06-01 00:00:00 纽约时间 America/New_York
+// 2026年6月纽约是 EDT / UTC-4
+// 等于 2026-06-01 04:00:00 UTC
+const DEADLINE_TIMESTAMP = Date.UTC(2026, 5, 1, 4, 0, 0);
 
 const WIDTH = 600;
 const HEIGHT = 150;
@@ -36,7 +37,7 @@ function drawFrame(ctx, timeLeft) {
 
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
-  // background
+  // 背景色
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -59,19 +60,19 @@ function drawFrame(ctx, timeLeft) {
     { label: "SECONDS", value: pad(seconds) }
   ];
 
-  // numbers
+  // 数字
   ctx.font = "64px Arial";
   values.forEach((item, index) => {
     ctx.fillText(String(item.value), centers[index], 75);
   });
 
-  // colons
+  // 冒号
   ctx.font = "56px Arial";
   ctx.fillText(":", 168, 72);
   ctx.fillText(":", 303, 72);
   ctx.fillText(":", 438, 72);
 
-  // labels
+  // 标签
   ctx.font = "22px Arial";
   values.forEach((item, index) => {
     ctx.fillText(item.label, centers[index], 118);
@@ -84,14 +85,19 @@ function createCountdownGif() {
   const ctx = canvas.getContext("2d");
 
   encoder.start();
-  encoder.setRepeat(0); // 0 = loop forever
-  encoder.setDelay(1000); // 1 second per frame
+
+  // 0 = 无限循环，不停止
+  encoder.setRepeat(0);
+
+  // 每帧停留 1 秒
+  encoder.setDelay(1000);
+
   encoder.setQuality(10);
 
   const now = Date.now();
 
-  // 生成 60 帧，让邮件里至少跳动 60 秒
-  for (let i = 0; i < 60; i++) {
+  // 生成 120 帧 = 每轮播放 2 分钟
+  for (let i = 0; i < 120; i++) {
     const timeLeft = getTimeLeft(now + i * 1000);
     drawFrame(ctx, timeLeft);
     encoder.addFrame(ctx);
@@ -108,9 +114,9 @@ app.get("/", (req, res) => {
 
 app.get("/debug", (req, res) => {
   res.json({
-    serverNow: new Date().toISOString(),
+    serverNowUTC: new Date().toISOString(),
     deadlineUTC: new Date(DEADLINE_TIMESTAMP).toISOString(),
-    deadlineChinaTime: "2026-06-01 00:00:00 UTC+8",
+    deadlineNewYorkTime: "2026-06-01 00:00:00 America/New_York",
     timeLeft: getTimeLeft(Date.now())
   });
 });
@@ -120,7 +126,7 @@ app.get("/countdown.gif", (req, res) => {
 
   res.setHeader("Content-Type", "image/gif");
 
-  // 邮件客户端/代理可能仍会缓存，但这里尽量禁止缓存
+  // 尽量避免缓存，方便 Mailchimp 测试时重新拉取
   res.setHeader(
     "Cache-Control",
     "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
