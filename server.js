@@ -1,11 +1,11 @@
 const express = require("express");
-const { createCanvas } = require("canvas");
-const GIFEncoder = require("gifencoder");
+const sharp = require("sharp");
+const { GIFEncoder, quantize, applyPalette } = require("gifenc");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 2026-06-01 00:00:00 纽约时间 America/New_York
+// 截止时间：2026-06-01 00:00:00 纽约时间
 // 2026年6月纽约是 EDT / UTC-4
 // 等于 2026-06-01 04:00:00 UTC
 const DEADLINE_TIMESTAMP = Date.UTC(2026, 5, 1, 4, 0, 0);
@@ -32,80 +32,137 @@ function getTimeLeft(timestampNow) {
   };
 }
 
-function drawFrame(ctx, timeLeft) {
+function createFrameSvg(timeLeft) {
   const { days, hours, minutes, seconds, isEnded } = timeLeft;
 
-  ctx.clearRect(0, 0, WIDTH, HEIGHT);
-
-  // 背景色
-  ctx.fillStyle = BG_COLOR;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = TEXT_COLOR;
-
   if (isEnded) {
-    ctx.font = "42px Arial";
-    ctx.fillText("OFFER ENDED", WIDTH / 2, 85);
-    return;
+    return `
+<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="${BG_COLOR}"/>
+  <text x="300" y="85" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="42"
+        fill="${TEXT_COLOR}">
+    OFFER ENDED
+  </text>
+</svg>`;
   }
 
-  const centers = [100, 235, 370, 505];
+  return `
+<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="${BG_COLOR}"/>
 
-  const values = [
-    { label: "DAYS", value: days },
-    { label: "HOURS", value: hours },
-    { label: "MINUTES", value: minutes },
-    { label: "SECONDS", value: pad(seconds) }
-  ];
+  <text x="100" y="76" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="64"
+        fill="${TEXT_COLOR}">
+    ${days}
+  </text>
 
-  // 数字
-  ctx.font = "64px Arial";
-  values.forEach((item, index) => {
-    ctx.fillText(String(item.value), centers[index], 75);
-  });
+  <text x="235" y="76" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="64"
+        fill="${TEXT_COLOR}">
+    ${hours}
+  </text>
 
-  // 冒号
-  ctx.font = "56px Arial";
-  ctx.fillText(":", 168, 72);
-  ctx.fillText(":", 303, 72);
-  ctx.fillText(":", 438, 72);
+  <text x="370" y="76" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="64"
+        fill="${TEXT_COLOR}">
+    ${minutes}
+  </text>
 
-  // 标签
-  ctx.font = "22px Arial";
-  values.forEach((item, index) => {
-    ctx.fillText(item.label, centers[index], 118);
-  });
+  <text x="505" y="76" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="64"
+        fill="${TEXT_COLOR}">
+    ${pad(seconds)}
+  </text>
+
+  <text x="168" y="72" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="56"
+        fill="${TEXT_COLOR}">
+    :
+  </text>
+
+  <text x="303" y="72" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="56"
+        fill="${TEXT_COLOR}">
+    :
+  </text>
+
+  <text x="438" y="72" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="56"
+        fill="${TEXT_COLOR}">
+    :
+  </text>
+
+  <text x="100" y="118" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="22"
+        fill="${TEXT_COLOR}">
+    DAYS
+  </text>
+
+  <text x="235" y="118" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="22"
+        fill="${TEXT_COLOR}">
+    HOURS
+  </text>
+
+  <text x="370" y="118" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="22"
+        fill="${TEXT_COLOR}">
+    MINUTES
+  </text>
+
+  <text x="505" y="118" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="22"
+        fill="${TEXT_COLOR}">
+    SECONDS
+  </text>
+</svg>`;
 }
 
-function createCountdownGif() {
-  const encoder = new GIFEncoder(WIDTH, HEIGHT);
-  const canvas = createCanvas(WIDTH, HEIGHT);
-  const ctx = canvas.getContext("2d");
+async function svgToRgba(svg) {
+  return await sharp(Buffer.from(svg))
+    .resize(WIDTH, HEIGHT)
+    .ensureAlpha()
+    .raw()
+    .toBuffer();
+}
 
-  encoder.start();
-
-  // 0 = 无限循环，不停止
-  encoder.setRepeat(0);
-
-  // 每帧停留 1 秒
-  encoder.setDelay(1000);
-
-  encoder.setQuality(10);
+async function createCountdownGif() {
+  const gif = GIFEncoder();
 
   const now = Date.now();
 
-  // 生成 120 帧 = 每轮播放 2 分钟
+  // 120 帧 = 2 分钟
   for (let i = 0; i < 120; i++) {
     const timeLeft = getTimeLeft(now + i * 1000);
-    drawFrame(ctx, timeLeft);
-    encoder.addFrame(ctx);
+    const svg = createFrameSvg(timeLeft);
+
+    const rgba = await svgToRgba(svg);
+
+    const palette = quantize(rgba, 256);
+    const indexed = applyPalette(rgba, palette);
+
+    gif.writeFrame(indexed, WIDTH, HEIGHT, {
+      palette,
+      delay: 1000
+    });
   }
 
-  encoder.finish();
+  gif.finish();
 
-  return encoder.out.getData();
+  return Buffer.from(gif.bytes());
 }
 
 app.get("/", (req, res) => {
@@ -121,20 +178,47 @@ app.get("/debug", (req, res) => {
   });
 });
 
-app.get("/countdown.gif", (req, res) => {
-  const gif = createCountdownGif();
+// 单帧 SVG 测试：先看这里有没有文字
+app.get("/frame.svg", (req, res) => {
+  const svg = createFrameSvg(getTimeLeft(Date.now()));
 
-  res.setHeader("Content-Type", "image/gif");
+  res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, no-cache, max-age=0");
+  res.send(svg);
+});
 
-  // 尽量避免缓存，方便 Mailchimp 测试时重新拉取
-  res.setHeader(
-    "Cache-Control",
-    "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-  );
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
+// 单帧 PNG 测试：再看这里有没有文字
+app.get("/frame.png", async (req, res) => {
+  try {
+    const svg = createFrameSvg(getTimeLeft(Date.now()));
+    const png = await sharp(Buffer.from(svg)).png().toBuffer();
 
-  res.send(gif);
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-store, no-cache, max-age=0");
+    res.send(png);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error generating PNG frame");
+  }
+});
+
+app.get("/countdown.gif", async (req, res) => {
+  try {
+    const gifBuffer = await createCountdownGif();
+
+    res.setHeader("Content-Type", "image/gif");
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+    );
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    res.send(gifBuffer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error generating countdown GIF");
+  }
 });
 
 app.listen(PORT, () => {
