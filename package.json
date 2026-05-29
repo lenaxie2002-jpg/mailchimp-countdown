@@ -1,0 +1,13 @@
+{
+  "name": "mailchimp-countdown",
+  "version": "1.0.0",
+  "description": "Dynamic countdown image for Mailchimp",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "canvas": "^2.11.2",
+    "express": "^4.18.3"
+  }
+}
